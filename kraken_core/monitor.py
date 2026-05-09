@@ -64,12 +64,11 @@ class KrakenMonitor:
             conns = psutil.net_connections(kind='tcp')
             ip_counts = defaultdict(int)
             for c in conns:
-                status = c.status
-                if status in ('ESTABLISHED', 'SYN_RECV', 'TIME_WAIT', 'CLOSE_WAIT'):
-                    if c.raddr:
-                        ip = c.raddr.ip
-                        if ip not in ('127.0.0.1', '::1', '0.0.0.0'):
-                            ip_counts[ip] += 1
+                if c.raddr:
+                    ip = c.raddr.ip
+                    # Ignore local loops and ngrok
+                    if ip not in ('127.0.0.1', '::1', '0.0.0.0'):
+                        ip_counts[ip] += 1
             
             if ip_counts:
                 top_ip, count = max(ip_counts.items(), key=lambda x: x[1])

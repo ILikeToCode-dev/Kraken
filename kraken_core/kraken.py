@@ -26,6 +26,9 @@ class StateLogHandler(logging.Handler):
         if len(self.state_dict["logs"]) > 100:
             self.state_dict["logs"].pop(0)
 
+# Suppress Flask request logs
+logging.getLogger('werkzeug').setLevel(logging.ERROR)
+
 app = Flask(__name__)
 CORS(app)
 
@@ -42,12 +45,13 @@ class KrakenCore:
             "tarpitted_ips": []
         }
         
-        # Attach the custom log handler to root logger
+        # Attached custom log handler to root logger
         state_handler = StateLogHandler(self.state)
         state_handler.setFormatter(logging.Formatter('%(asctime)s | KRAKEN | %(levelname)s | %(message)s'))
         logging.getLogger().addHandler(state_handler)
 
-        self.monitor = KrakenMonitor(threshold_pps=2000, interface='eth0') # Set interface
+        # Lowered threshold to 300 PPS and 10 connections for easier exhibition testing
+        self.monitor = KrakenMonitor(threshold_pps=300, max_conn_per_ip=10, interface='eth0') 
         self.shifter = OracleShifter()
         self.tarpit = TCPTarPit(port=8080)
         
