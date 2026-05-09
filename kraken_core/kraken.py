@@ -1,6 +1,7 @@
 import logging
 import time
 import threading
+import os
 from monitor import KrakenMonitor
 from shifter import OracleShifter
 from tarpit import TCPTarPit
@@ -37,7 +38,8 @@ class KrakenCore:
             "active_traps": 0,
             "rotations": [],
             "status": "SECURE",
-            "logs": []
+            "logs": [],
+            "tarpitted_ips": []
         }
         
         # Attach the custom log handler to root logger
@@ -52,16 +54,34 @@ class KrakenCore:
         self.is_shifting = False
 
 
-    def trigger_shift_protocol(self):
+    def trigger_shift_protocol(self, attacker_ip=None):
         if self.is_shifting:
             return
             
         self.is_shifting = True
-        self.state["status"] = "DEFENDING (SHIFTING)"
-        logging.critical(f"RED ALERT: PPS exceeded {self.monitor.threshold_pps}. Initiating IP Shift!")
+        self.state["status"] = "DEFENDING (ACTIVE RESPONSE)"
         
-        # 1. Spin up the tarpit (if not already running) to catch ongoing connections
-        # IPTables would redirect port 80/443 to 8080 during this transition phase.
+        if attacker_ip:
+            logging.critical(f"TARGET ACQUIRED: {attacker_ip} via active connection flood.")
+        else:
+            logging.critical(f"RED ALERT: Volumetric Attack detected. PPS Exceeded Threshold.")
+            
+        # --- 1. THE TRAP (IPTABLES) ---
+        if attacker_ip and attacker_ip not in self.state.get("tarpitted_ips", []):
+            logging.warning(f"Isolating {attacker_ip} -> Routing inbound packets to TCP Tar-Pit (Port 8080)")
+            try:
+                # Add iptables PREROUTING rule dynamically to trap the specific attacker
+                cmd = f"sudo iptables -t nat -A PREROUTING -s {attacker_ip} -p tcp -j REDIRECT --to-port 8080"
+                os.system(cmd)
+                
+                if "tarpitted_ips" not in self.state:
+                    self.state["tarpitted_ips"] = []
+                self.state["tarpitted_ips"].append(attacker_ip)
+                logging.info(f"IPTables rule active for {attacker_ip}. Bot is now trapped.")
+            except Exception as e:
+                logging.error(f"Failed to isolate attacker: {e}")
+                
+        time.sleep(1)
         
         # 2. Call OCI SDK to rotate IP
         old_ip = self.state["current_ip"]
@@ -89,13 +109,19 @@ class KrakenCore:
     def run_engine(self):
         self.tarpit.start()
         while True:
-            pps, mbps, attack = self.monitor.track()
+            pps, mbps, attack, attacker_ip = self.monitor.track()
             self.state["pps"] = pps
             self.state["bandwidth"] = mbps
             self.state["active_traps"] = self.tarpit.active_traps
             
+            # Status update for smaller spikes
+            if pps > 100 and not attack and not self.is_shifting:
+                self.state["status"] = "ELEVATED TRAFFIC"
+            elif not self.is_shifting:
+                self.state["status"] = "SECURE"
+            
             if attack and not self.is_shifting:
-                threading.Thread(target=self.trigger_shift_protocol, daemon=True).start()
+                threading.Thread(target=self.trigger_shift_protocol, args=(attacker_ip,), daemon=True).start()
                 
             time.sleep(1)
 

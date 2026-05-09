@@ -1,10 +1,12 @@
 import psutil
 import time
 import logging
+from collections import defaultdict
 
 class KrakenMonitor:
-    def __init__(self, threshold_pps=2000, interface='eth0'):
+    def __init__(self, threshold_pps=500, max_conn_per_ip=20, interface='eth0'):
         self.threshold_pps = threshold_pps
+        self.max_conn_per_ip = max_conn_per_ip
         self.interface = interface
         self.last_packets = 0
         self.last_bytes_recv = 0
@@ -18,7 +20,16 @@ class KrakenMonitor:
 
     def _get_counters(self):
         counters = psutil.net_io_counters(pernic=True)
-        return counters.get(self.interface, None)
+        if self.interface in counters:
+            return counters[self.interface]
+        # Fallback if eth0 is missing (like enp0s3 on some Oracle instances)
+        total_recv = sum(c.packets_recv for n, c in counters.items() if n != 'lo')
+        total_bytes = sum(c.bytes_recv for n, c in counters.items() if n != 'lo')
+        class DummyCounter:
+            def __init__(self, p, b):
+                self.packets_recv = p
+                self.bytes_recv = b
+        return DummyCounter(total_recv, total_bytes)
 
     def track(self):
         """
@@ -47,14 +58,34 @@ class KrakenMonitor:
         self.last_bytes_recv = bytes_recv
         self.last_time = current_time
 
-        is_under_attack = pps >= self.threshold_pps
+        # APP-LAYER ATTACK DETECTION (Active Connection Count)
+        attacker_ip = None
+        try:
+            conns = psutil.net_connections(kind='tcp')
+            ip_counts = defaultdict(int)
+            for c in conns:
+                status = c.status
+                if status in ('ESTABLISHED', 'SYN_RECV', 'TIME_WAIT', 'CLOSE_WAIT'):
+                    if c.raddr:
+                        ip = c.raddr.ip
+                        if ip not in ('127.0.0.1', '::1', '0.0.0.0'):
+                            ip_counts[ip] += 1
+            
+            if ip_counts:
+                top_ip, count = max(ip_counts.items(), key=lambda x: x[1])
+                if count >= self.max_conn_per_ip:
+                    attacker_ip = top_ip
+        except Exception:
+            pass
 
-        return round(pps, 2), round(mbps_rx, 2), is_under_attack
+        is_under_attack = pps >= self.threshold_pps or attacker_ip is not None
+
+        return round(pps, 2), round(mbps_rx, 2), is_under_attack, attacker_ip
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     monitor = KrakenMonitor(threshold_pps=2000)
     while True:
-        pps, mbps, attack = monitor.track()
-        logging.info(f"PPS: {pps} | Bandwidth: {mbps} Mbps | Attack Detected: {attack}")
+        pps, mbps, attack, attacker_ip = monitor.track()
+        logging.info(f"PPS: {pps} | Bandwidth: {mbps} Mbps | Attack Detected: {attack} | Attacker IP: {attacker_ip}")
         time.sleep(1)

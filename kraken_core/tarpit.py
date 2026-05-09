@@ -14,7 +14,7 @@ class TCPTarPit:
         self.running = True
         server_thread = threading.Thread(target=self._run_server, daemon=True)
         server_thread.start()
-        logging.info(f"Tarpit initialized on {self.host}:{self.port}")
+        logging.info(f"Tarpit Blackhole opened on {self.host}:{self.port}")
         
     def stop(self):
         self.running = False
@@ -45,22 +45,23 @@ class TCPTarPit:
                     logging.error(f"Tarpit server error: {e}")
 
     def _trap_client(self, conn, addr):
-        logging.warning(f"ATTACKER TRAPPED IN TAR-PIT: {addr[0]}:{addr[1]}")
+        # logging.warning(f"ATTACKER TRAPPED IN TAR-PIT: {addr[0]}:{addr[1]}")
         try:
             # We never close the connection. We send bytes at extreme intervals 
             # to keep the attacker's sockets locked up waiting for data.
             conn.sendall(b"HTTP/1.1 200 OK\r\n")
             while self.running:
-                time.sleep(15) 
+                time.sleep(5) 
                 # Send 1 byte to keep connection alive and reset timeout on attacker end
                 conn.sendall(b"X") 
         except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
             pass # Target gave up
         except Exception as e:
-            pass
+             # logging.error(f"Tarpit send error: {e}")
+             pass
         finally:
             self.active_traps -= 1
-            logging.info(f"Attacker {addr[0]} released / died.")
+            # logging.info(f"Attacker {addr[0]} released / died.")
             conn.close()
 
 if __name__ == "__main__":

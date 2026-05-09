@@ -6,7 +6,7 @@ import {
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function Dashboard() {
-  const [backendUrl, setBackendUrl] = useState("http://127.0.0.1:5000");
+  const [backendUrl, setBackendUrl] = useState("https://unbridle-bootie-vitality.ngrok-free.dev");
   const [isConnected, setIsConnected] = useState(false);
   
   const [data, setData] = useState<any[]>([]);
@@ -35,7 +35,12 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetch(`${backendUrl}/api/stats`);
+        const response = await fetch(`${backendUrl}/api/stats`, {
+          headers: {
+            'ngrok-skip-browser-warning': 'true',
+            'Content-Type': 'application/json'
+          }
+        });
         if (!response.ok) throw new Error("Network response was not ok");
         const json = await response.json();
         
