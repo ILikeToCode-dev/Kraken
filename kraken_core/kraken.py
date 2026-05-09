@@ -72,16 +72,23 @@ class KrakenCore:
             
         # --- 1. THE TRAP (IPTABLES) ---
         if attacker_ip and attacker_ip not in self.state.get("tarpitted_ips", []):
-            logging.warning(f"Isolating {attacker_ip} -> Routing inbound packets to TCP Tar-Pit (Port 8080)")
+            logging.warning(f"Isolating {attacker_ip} -> TCP to Tarpit, DROPPING everything else.")
             try:
-                # Add iptables PREROUTING rule dynamically to trap the specific attacker
-                cmd = f"sudo iptables -t nat -A PREROUTING -s {attacker_ip} -p tcp -j REDIRECT --to-port 8080"
-                os.system(cmd)
+                # 1. Force all TCP connections from this IP into the local TCP Port 8080 (Tar-Pit)
+                os.system(f"sudo iptables -t nat -I PREROUTING 1 -s {attacker_ip} -p tcp -j REDIRECT --to-port 8080")
+                
+                # 2. Hard DROP for everything else (UDP/ICMP) to kill raw bandwidth floods
+                os.system(f"sudo iptables -I INPUT 1 -s {attacker_ip} -p udp -j DROP")
+                os.system(f"sudo iptables -I INPUT 1 -s {attacker_ip} -p icmp -j DROP")
+                
+                # 3. As a last resort fallback, if we just want to totally blackhole them:
+                # uncommenting the below will completely drop their traffic at the kernel level
+                # os.system(f"sudo iptables -I INPUT 1 -s {attacker_ip} -j DROP")
                 
                 if "tarpitted_ips" not in self.state:
                     self.state["tarpitted_ips"] = []
                 self.state["tarpitted_ips"].append(attacker_ip)
-                logging.info(f"IPTables rule active for {attacker_ip}. Bot is now trapped.")
+                logging.info(f"IPTables isolation active. {attacker_ip} is now trapped/blacklisted.")
             except Exception as e:
                 logging.error(f"Failed to isolate attacker: {e}")
                 

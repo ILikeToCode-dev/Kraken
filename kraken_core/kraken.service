@@ -1,0 +1,18 @@
+[Unit]
+Description=Project Kraken MTD Core Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+# Adjust this path if your directory is different
+WorkingDirectory=/home/ubuntu/kraken_core
+ExecStart=/usr/bin/python3 /home/ubuntu/kraken_core/kraken.py
+Restart=always
+RestartSec=5
+
+# Helps Python output logs to systemd immediately
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

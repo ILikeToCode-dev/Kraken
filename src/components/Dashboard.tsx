@@ -21,7 +21,8 @@ export default function Dashboard() {
     bandwidth: 0,
     active_traps: 0,
     status: "DISCONNECTED",
-    rotations: [] as any[]
+    rotations: [] as any[],
+    tarpitted_ips: [] as string[]
   });
   
   const endRef = useRef<HTMLDivElement>(null);
@@ -51,7 +52,8 @@ export default function Dashboard() {
           bandwidth: json.bandwidth || 0,
           active_traps: json.active_traps || 0,
           status: json.status || "SECURE",
-          rotations: json.rotations || []
+          rotations: json.rotations || [],
+          tarpitted_ips: json.tarpitted_ips || []
         });
 
         if (json.logs && json.logs.length > 0) {
@@ -194,10 +196,22 @@ export default function Dashboard() {
             </div>
             <div className="col-span-2 lg:col-span-1 flex flex-col gap-2">
               <span className="text-[10px] uppercase tracking-widest opacity-40 flex items-center gap-2">
-                <TerminalIcon className="w-3 h-3" /> Bots Frozen (Tar-Pit)
+                <TerminalIcon className="w-3 h-3" /> Bots Blacklisted (Tar-Pit)
               </span>
-              <span className="text-xl md:text-2xl font-mono tracking-tight text-red-500">{state.active_traps} units</span>
-              <div className="h-1 bg-red-500 w-3/4 mt-2 hover:w-full transition-all duration-1000"></div>
+              <div className="flex items-center gap-2">
+                <span className="text-xl md:text-2xl font-mono tracking-tight text-red-500">{state.tarpitted_ips.length} units</span>
+              </div>
+              <div className="flex flex-wrap gap-1 mt-1 font-mono text-[10px]">
+                {state.tarpitted_ips.length === 0 ? (
+                  <span className="text-white/30 italic">No threats captured yet...</span>
+                ) : (
+                  state.tarpitted_ips.map((ip, i) => (
+                    <span key={i} className="px-1.5 py-0.5 bg-red-950/50 border border-red-500/30 text-red-400 rounded">
+                      {ip}
+                    </span>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </section>

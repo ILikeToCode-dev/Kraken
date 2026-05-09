@@ -58,7 +58,7 @@ class KrakenMonitor:
         self.last_bytes_recv = bytes_recv
         self.last_time = current_time
 
-        # APP-LAYER ATTACK DETECTION (Active Connection Count)
+        # APP-LAYER ATTACK DETECTION (Active Connection Count & Traffic Source)
         attacker_ip = None
         try:
             conns = psutil.net_connections(kind='tcp')
@@ -71,8 +71,14 @@ class KrakenMonitor:
                         ip_counts[ip] += 1
             
             if ip_counts:
+                # Find the IP with the most active connections
                 top_ip, count = max(ip_counts.items(), key=lambda x: x[1])
+                
+                # If they have too many parallel connections, tag them
                 if count >= self.max_conn_per_ip:
+                    attacker_ip = top_ip
+                # Or, if we are under a volumetric flood, just tag the top IP anyway
+                elif pps >= self.threshold_pps:
                     attacker_ip = top_ip
         except Exception:
             pass
